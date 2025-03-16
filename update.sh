@@ -157,6 +157,9 @@ update_default_hostname() {
 add_network_config_script() {
     local script_path="$BUILD_DIR/package/base-files/files/usr/bin/network-config"
     
+    # 确保目录存在
+    mkdir -p "$(dirname "$script_path")"
+    
     # 创建网络配置脚本
     cat <<'EOF' >"$script_path"
 #!/bin/sh
@@ -278,6 +281,9 @@ EOF
 # 添加旁路由设置脚本：提供一键将路由器设置为旁路由模式的功能
 add_bypass_router_script() {
     local script_path="$BUILD_DIR/package/base-files/files/usr/bin/set-bypass-mode"
+    
+    # 确保目录存在
+    mkdir -p "$(dirname "$script_path")"
     
     # 创建旁路由设置脚本
     cat <<'EOF' >"$script_path"
@@ -439,6 +445,9 @@ EOF
 # 添加IPv6配置脚本：提供IPv6相关设置功能
 add_ipv6_config_script() {
     local script_path="$BUILD_DIR/package/base-files/files/usr/bin/ipv6-config"
+    
+    # 确保目录存在
+    mkdir -p "$(dirname "$script_path")"
     
     # 创建IPv6配置脚本
     cat <<'EOF' >"$script_path"
