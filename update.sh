@@ -462,8 +462,10 @@ add_ipv6_config_script() {
 #   -e, --enable            启用IPv6
 #   -d, --disable           禁用IPv6
 #   -m, --mode <模式>        设置IPv6模式 (native, relay, hybrid, passthrough)
+#   -r, --router <类型>      设置路由器类型 (main, bypass)
 #   -p, --prefix <前缀>      设置IPv6前缀 (用于relay模式)
 #   -s, --server <服务器>    设置IPv6中继服务器 (用于relay模式)
+#   -u, --upstream <地址>    设置上游路由器IPv6地址 (用于旁路由模式)
 
 show_help() {
     echo "IPv6配置脚本"
@@ -473,8 +475,10 @@ show_help() {
     echo "  -e, --enable            启用IPv6"
     echo "  -d, --disable           禁用IPv6"
     echo "  -m, --mode <模式>        设置IPv6模式 (native, relay, hybrid, passthrough)"
+    echo "  -r, --router <类型>      设置路由器类型 (main, bypass)"
     echo "  -p, --prefix <前缀>      设置IPv6前缀 (用于relay模式)"
     echo "  -s, --server <服务器>    设置IPv6中继服务器 (用于relay模式)"
+    echo "  -u, --upstream <地址>    设置上游路由器IPv6地址 (用于旁路由模式)"
     exit 0
 }
 
@@ -482,8 +486,10 @@ show_help() {
 ENABLE_IPV6=0
 DISABLE_IPV6=0
 IPV6_MODE=""
+ROUTER_TYPE="main"
 IPV6_PREFIX=""
 IPV6_SERVER=""
+UPSTREAM_IPV6=""
 
 # 解析命令行参数
 while [ "$1" != "" ]; do
@@ -501,6 +507,10 @@ while [ "$1" != "" ]; do
             shift
             IPV6_MODE=$1
             ;;
+        -r | --router)
+            shift
+            ROUTER_TYPE=$1
+            ;;
         -p | --prefix)
             shift
             IPV6_PREFIX=$1
@@ -508,6 +518,10 @@ while [ "$1" != "" ]; do
         -s | --server)
             shift
             IPV6_SERVER=$1
+            ;;
+        -u | --upstream)
+            shift
+            UPSTREAM_IPV6=$1
             ;;
         *)
             echo "错误: 未知选项 $1"
@@ -520,6 +534,18 @@ done
 # 检查冲突选项
 if [ "$ENABLE_IPV6" -eq 1 ] && [ "$DISABLE_IPV6" -eq 1 ]; then
     echo "错误: 不能同时启用和禁用IPv6"
+    show_help
+fi
+
+# 检查路由器类型
+if [ "$ROUTER_TYPE" != "main" ] && [ "$ROUTER_TYPE" != "bypass" ]; then
+    echo "错误: 路由器类型必须是 main 或 bypass"
+    show_help
+fi
+
+# 如果是旁路由模式，检查上游IPv6地址
+if [ "$ROUTER_TYPE" = "bypass" ] && [ "$ENABLE_IPV6" -eq 1 ] && [ -z "$UPSTREAM_IPV6" ]; then
+    echo "错误: 旁路由模式需要指定上游路由器IPv6地址"
     show_help
 fi
 
@@ -566,108 +592,159 @@ if [ "$ENABLE_IPV6" -eq 1 ]; then
     uci set 'network.globals=globals'
     uci set network.globals.ula_prefix='fd00::/48'
     
-    # 根据指定的模式配置IPv6
-    case "$IPV6_MODE" in
-        native)
-            echo "配置本地IPv6模式..."
-            
-            # 配置LAN接口
-            uci set network.lan.ip6assign='60'
-            
-            # 配置WAN接口
-            uci set network.wan.ipv6='1'
-            uci set network.wan.delegate='0'
-            uci set network.wan6=interface
-            uci set network.wan6.proto='dhcpv6'
-            uci set network.wan6.device='@wan'
-            uci set network.wan6.reqaddress='try'
-            uci set network.wan6.reqprefix='auto'
-            
-            # 配置DHCPv6服务
-            uci set dhcp.lan.dhcpv6='server'
-            uci set dhcp.lan.ra='server'
-            uci set dhcp.lan.ra_management='1'
-            uci set dhcp.lan.ra_default='1'
-            ;;
-            
-        relay)
-            echo "配置IPv6中继模式..."
-            
-            if [ -z "$IPV6_PREFIX" ]; then
-                echo "错误: 中继模式需要指定IPv6前缀"
+    # 主路由模式配置
+    if [ "$ROUTER_TYPE" = "main" ]; then
+        # 根据指定的模式配置IPv6
+        case "$IPV6_MODE" in
+            native)
+                echo "配置主路由本地IPv6模式..."
+                
+                # 配置LAN接口
+                uci set network.lan.ip6assign='60'
+                
+                # 配置WAN接口
+                uci set network.wan.ipv6='1'
+                uci set network.wan.delegate='0'
+                
+                # 确保wan6接口存在
+                uci -q delete network.wan6
+                uci set network.wan6=interface
+                uci set network.wan6.proto='dhcpv6'
+                
+                # 检查设备是否支持@wan格式，如果不支持则使用实际接口名
+                local wan_device=$(uci -q get network.wan.device)
+                if [ -n "$wan_device" ]; then
+                    uci set network.wan6.device="$wan_device"
+                else
+                    # 尝试使用@wan格式
+                    uci set network.wan6.device='@wan'
+                fi
+                
+                uci set network.wan6.reqaddress='try'
+                uci set network.wan6.reqprefix='auto'
+                
+                # 配置DHCPv6服务
+                uci set dhcp.lan.dhcpv6='server'
+                uci set dhcp.lan.ra='server'
+                uci set dhcp.lan.ra_management='1'
+                uci set dhcp.lan.ra_default='1'
+                ;;
+                
+            relay)
+                echo "配置主路由IPv6中继模式..."
+                
+                if [ -z "$IPV6_PREFIX" ]; then
+                    echo "错误: 中继模式需要指定IPv6前缀"
+                    exit 1
+                fi
+                
+                if [ -z "$IPV6_SERVER" ]; then
+                    echo "错误: 中继模式需要指定IPv6中继服务器"
+                    exit 1
+                fi
+                
+                # 配置LAN接口
+                uci set network.lan.ip6assign='60'
+                
+                # 配置WAN接口
+                uci set network.wan.ipv6='1'
+                
+                # 配置6in4接口
+                uci -q delete network.wan6
+                uci set network.wan6=interface
+                uci set network.wan6.proto='6in4'
+                uci set network.wan6.peeraddr="$IPV6_SERVER"
+                uci set network.wan6.ip6prefix="$IPV6_PREFIX"
+                uci set network.wan6.tunnelid='1'
+                
+                # 配置DHCPv6服务
+                uci set dhcp.lan.dhcpv6='server'
+                uci set dhcp.lan.ra='server'
+                uci set dhcp.lan.ra_management='1'
+                ;;
+                
+            hybrid)
+                echo "配置主路由混合IPv6模式..."
+                
+                # 配置LAN接口
+                uci set network.lan.ip6assign='60'
+                
+                # 配置WAN接口
+                uci set network.wan.ipv6='1'
+                uci set network.wan.delegate='0'
+                
+                # 配置DHCPv6客户端
+                uci -q delete network.wan6
+                uci set network.wan6=interface
+                uci set network.wan6.proto='dhcpv6'
+                
+                # 检查设备是否支持@wan格式，如果不支持则使用实际接口名
+                local wan_device=$(uci -q get network.wan.device)
+                if [ -n "$wan_device" ]; then
+                    uci set network.wan6.device="$wan_device"
+                else
+                    # 尝试使用@wan格式
+                    uci set network.wan6.device='@wan'
+                fi
+                
+                uci set network.wan6.reqaddress='try'
+                uci set network.wan6.reqprefix='auto'
+                
+                # 配置DHCPv6服务
+                uci set dhcp.lan.dhcpv6='hybrid'
+                uci set dhcp.lan.ra='hybrid'
+                uci set dhcp.lan.ndp='hybrid'
+                ;;
+                
+            passthrough)
+                echo "配置主路由IPv6透传模式..."
+                
+                # 配置LAN接口
+                uci -q delete network.lan.ip6assign
+                
+                # 配置WAN接口
+                uci set network.wan.ipv6='1'
+                uci set network.wan.delegate='1'
+                
+                # 配置DHCPv6服务
+                uci set dhcp.lan.dhcpv6='relay'
+                uci set dhcp.lan.ra='relay'
+                uci set dhcp.lan.ndp='relay'
+                uci set dhcp.lan.master='1'
+                ;;
+                
+            *)
+                echo "错误: 未知的IPv6模式 '$IPV6_MODE'"
+                echo "支持的模式: native, relay, hybrid, passthrough"
                 exit 1
-            fi
-            
-            if [ -z "$IPV6_SERVER" ]; then
-                echo "错误: 中继模式需要指定IPv6中继服务器"
-                exit 1
-            fi
-            
-            # 配置LAN接口
-            uci set network.lan.ip6assign='60'
-            
-            # 配置WAN接口
-            uci set network.wan.ipv6='1'
-            
-            # 配置6in4接口
-            uci set network.wan6=interface
-            uci set network.wan6.proto='6in4'
-            uci set network.wan6.peeraddr="$IPV6_SERVER"
-            uci set network.wan6.ip6prefix="$IPV6_PREFIX"
-            uci set network.wan6.tunnelid='1'
-            
-            # 配置DHCPv6服务
-            uci set dhcp.lan.dhcpv6='server'
-            uci set dhcp.lan.ra='server'
-            uci set dhcp.lan.ra_management='1'
-            ;;
-            
-        hybrid)
-            echo "配置混合IPv6模式..."
-            
-            # 配置LAN接口
-            uci set network.lan.ip6assign='60'
-            
-            # 配置WAN接口
-            uci set network.wan.ipv6='1'
-            uci set network.wan.delegate='0'
-            
-            # 配置DHCPv6客户端
-            uci set network.wan6=interface
-            uci set network.wan6.proto='dhcpv6'
-            uci set network.wan6.device='@wan'
-            uci set network.wan6.reqaddress='try'
-            uci set network.wan6.reqprefix='auto'
-            
-            # 配置DHCPv6服务
-            uci set dhcp.lan.dhcpv6='hybrid'
-            uci set dhcp.lan.ra='hybrid'
-            uci set dhcp.lan.ndp='hybrid'
-            ;;
-            
-        passthrough)
-            echo "配置IPv6透传模式..."
-            
-            # 配置LAN接口
-            uci -q delete network.lan.ip6assign
-            
-            # 配置WAN接口
-            uci set network.wan.ipv6='1'
-            uci set network.wan.delegate='1'
-            
-            # 配置DHCPv6服务
-            uci set dhcp.lan.dhcpv6='relay'
-            uci set dhcp.lan.ra='relay'
-            uci set dhcp.lan.ndp='relay'
-            uci set dhcp.lan.master='1'
-            ;;
-            
-        *)
-            echo "错误: 未知的IPv6模式 '$IPV6_MODE'"
-            echo "支持的模式: native, relay, hybrid, passthrough"
+                ;;
+        esac
+    
+    # 旁路由模式配置
+    elif [ "$ROUTER_TYPE" = "bypass" ]; then
+        echo "配置旁路由IPv6模式..."
+        
+        if [ -z "$UPSTREAM_IPV6" ]; then
+            echo "错误: 旁路由模式需要指定上游路由器IPv6地址"
             exit 1
-            ;;
-    esac
+        fi
+        
+        # 配置LAN接口
+        uci -q delete network.lan.ip6assign
+        
+        # 配置静态IPv6地址
+        uci set network.lan.ip6addr="$UPSTREAM_IPV6"
+        
+        # 禁用DHCPv6服务
+        uci set dhcp.lan.dhcpv6='disabled'
+        uci set dhcp.lan.ra='disabled'
+        uci set dhcp.lan.ndp='disabled'
+        
+        # 启用IPv6转发
+        uci set network.@globals[0].packet_steering='1'
+        
+        echo "旁路由IPv6已配置，使用上游地址: $UPSTREAM_IPV6"
+    fi
     
     # 提交更改并重启服务
     uci commit network
@@ -675,7 +752,7 @@ if [ "$ENABLE_IPV6" -eq 1 ]; then
     /etc/init.d/network restart
     /etc/init.d/dnsmasq restart
     
-    echo "IPv6已启用，模式: $IPV6_MODE"
+    echo "IPv6已启用，路由器类型: $ROUTER_TYPE"
     exit 0
 fi
 
