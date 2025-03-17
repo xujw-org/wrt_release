@@ -117,8 +117,10 @@ ipv6-config [选项]
 - `-e, --enable` - 启用IPv6
 - `-d, --disable` - 禁用IPv6
 - `-m, --mode <模式>` - 设置IPv6模式 (native, relay, hybrid, passthrough)
+- `-r, --router <类型>      设置路由器类型 (main, bypass)
 - `-p, --prefix <前缀>` - 设置IPv6前缀 (用于relay模式)
 - `-s, --server <服务器>` - 设置IPv6中继服务器 (用于relay模式)
+- `-u, --upstream <地址>    设置上游路由器IPv6地址 (用于旁路由模式)
 
 ### 示例：
 ```bash
@@ -127,6 +129,9 @@ ipv6-config -e -m native
 
 # 配置IPv6中继模式
 ipv6-config -e -m relay -p 2001:db8::/64 -s 192.168.1.100
+
+# 配置旁路由模式
+ipv6-config -e -m native -r bypass -u fdf1:ccc4:750b::5
 
 # 禁用IPv6
 ipv6-config -d
