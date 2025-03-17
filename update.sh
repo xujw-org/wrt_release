@@ -612,7 +612,7 @@ if [ "$ENABLE_IPV6" -eq 1 ]; then
                 uci set network.wan6.proto='dhcpv6'
                 
                 # 检查设备是否支持@wan格式，如果不支持则使用实际接口名
-                local wan_device=$(uci -q get network.wan.device)
+                wan_device=$(uci -q get network.wan.device)
                 if [ -n "$wan_device" ]; then
                     uci set network.wan6.device="$wan_device"
                 else
@@ -679,7 +679,7 @@ if [ "$ENABLE_IPV6" -eq 1 ]; then
                 uci set network.wan6.proto='dhcpv6'
                 
                 # 检查设备是否支持@wan格式，如果不支持则使用实际接口名
-                local wan_device=$(uci -q get network.wan.device)
+                wan_device=$(uci -q get network.wan.device)
                 if [ -n "$wan_device" ]; then
                     uci set network.wan6.device="$wan_device"
                 else
