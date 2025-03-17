@@ -409,10 +409,11 @@ uci set network.lan.gateway="$GATEWAY"
 
 # 设置DNS服务器
 uci -q delete network.lan.dns
-IFS=',' read -ra DNS_SERVERS <<< "$DNS"
-for server in "${DNS_SERVERS[@]}"; do
+IFS=','
+for server in $DNS; do
     uci add_list network.lan.dns="$server"
 done
+unset IFS
 
 # 禁用DHCP服务
 uci set dhcp.lan.ignore='1'
