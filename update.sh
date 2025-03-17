@@ -29,7 +29,7 @@ FEEDS_CONF="feeds.conf.default"  # feeds配置文件名
 GOLANG_REPO="https://github.com/sbwml/packages_lang_golang"  # golang仓库地址
 GOLANG_BRANCH="24.x"  # golang分支
 THEME_SET="argon"     # 默认主题
-LAN_ADDR="10.1.1.1"   # 默认LAN地址
+LAN_ADDR="10.1.1.2"   # 默认LAN地址
 
 # 克隆仓库函数：如果构建目录不存在，则克隆指定的仓库
 clone_repo() {
