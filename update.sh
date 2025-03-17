@@ -261,10 +261,11 @@ if [ ! -z "$DNS" ]; then
     uci -q delete network.$INTERFACE.dns
     
     # 添加新的DNS服务器
-    IFS=',' read -ra DNS_SERVERS <<< "$DNS"
-    for server in "${DNS_SERVERS[@]}"; do
+    IFS=','
+    for server in $DNS; do
         uci add_list network.$INTERFACE.dns="$server"
     done
+    unset IFS
 fi
 
 # 提交更改并重启网络
